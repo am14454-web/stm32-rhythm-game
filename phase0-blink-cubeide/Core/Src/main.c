@@ -55,6 +55,11 @@ const osThreadAttr_t buttonTask_attributes = {
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityHigh,
 };
+/* Definitions for buttonQueue */
+osMessageQueueId_t buttonQueueHandle;
+const osMessageQueueAttr_t buttonQueue_attributes = {
+  .name = "buttonQueue"
+};
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -122,6 +127,10 @@ int main(void)
   /* USER CODE BEGIN RTOS_TIMERS */
   /* start timers, add new ones, ... */
   /* USER CODE END RTOS_TIMERS */
+
+  /* Create the queue(s) */
+  /* creation of buttonQueue */
+  buttonQueueHandle = osMessageQueueNew (10, sizeof(uint8_t), &buttonQueue_attributes);
 
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
@@ -252,18 +261,27 @@ static void MX_GPIO_Init(void)
   * @retval None
   */
 /* USER CODE END Header_StartDefaultTask */
+
 void StartDefaultTask(void *argument)
 {
-  /* USER CODE BEGIN 5 */
-  /* Infinite loop */
+  static uint8_t buttonHeld = 0;
+
   for(;;)
   {
-	HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
+    uint8_t received;
+    if (osMessageQueueGet(buttonQueueHandle, &received, NULL, 0) == osOK)
+    {
+      buttonHeld = received;
+    }
+
+    if (buttonHeld)
+      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
+    else
+      HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
+
     osDelay(500);
   }
-  /* USER CODE END 5 */
 }
-
 /* USER CODE BEGIN Header_StartButtonTask */
 /**
 * @brief Function implementing the buttonTask thread.
@@ -273,18 +291,12 @@ void StartDefaultTask(void *argument)
 /* USER CODE END Header_StartButtonTask */
 void StartButtonTask(void *argument)
 {
-  /* USER CODE BEGIN StartButtonTask */
-  /* Infinite loop */
   for(;;)
   {
-	if (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0) == GPIO_PIN_RESET){
-		//Button is pressed -> forces LED on
-		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
-	}
-    osDelay(5);
-
+    uint8_t state = (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0) == GPIO_PIN_RESET) ? 1 : 0;
+    osMessageQueuePut(buttonQueueHandle, &state, 0, 0);
+    osDelay(10);
   }
-  /* USER CODE END StartButtonTask */
 }
 
 /**
